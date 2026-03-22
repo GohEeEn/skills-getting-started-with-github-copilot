@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import RedirectResponse
 import os
+import copy
 from pathlib import Path
 
 app = FastAPI(title="Mergington High School API",
@@ -19,8 +20,8 @@ current_dir = Path(__file__).parent
 app.mount("/static", StaticFiles(directory=os.path.join(Path(__file__).parent,
           "static")), name="static")
 
-# In-memory activity database
-activities = {
+# Initial activity database
+activities_initial = {
     "Chess Club": {
         "description": "Learn strategies and compete in chess tournaments",
         "schedule": "Fridays, 3:30 PM - 5:00 PM",
@@ -38,8 +39,81 @@ activities = {
         "schedule": "Mondays, Wednesdays, Fridays, 2:00 PM - 3:00 PM",
         "max_participants": 30,
         "participants": ["john@mergington.edu", "olivia@mergington.edu"]
+    },
+    "Basketball Team": {
+        "description": "Competitive basketball team for intramural and regional tournaments",
+        "schedule": "Mondays and Wednesdays, 4:00 PM - 5:30 PM",
+        "max_participants": 15,
+        "participants": ["james@mergington.edu"]
+    },
+    "Tennis Club": {
+        "description": "Learn tennis skills and participate in friendly matches",
+        "schedule": "Tuesdays and Thursdays, 4:00 PM - 5:00 PM",
+        "max_participants": 10,
+        "participants": ["sarah@mergington.edu"]
+    },
+    "Art Studio": {
+        "description": "Explore painting, drawing, and mixed media techniques",
+        "schedule": "Mondays and Thursdays, 3:30 PM - 5:00 PM",
+        "max_participants": 18,
+        "participants": ["isabella@mergington.edu", "lucas@mergington.edu"]
+    },
+    "Music Band": {
+        "description": "Join the school band and perform in concerts",
+        "schedule": "Wednesdays and Fridays, 3:30 PM - 4:45 PM",
+        "max_participants": 25,
+        "participants": ["ava@mergington.edu"]
+    },
+    "Debate Club": {
+        "description": "Develop public speaking and argumentation skills",
+        "schedule": "Tuesdays, 3:30 PM - 5:00 PM",
+        "max_participants": 16,
+        "participants": ["william@mergington.edu", "grace@mergington.edu"]
+    },
+    "Science Olympiad": {
+        "description": "Compete in science challenges and experiments",
+        "schedule": "Wednesdays, 4:00 PM - 5:30 PM",
+        "max_participants": 14,
+        "participants": ["noah@mergington.edu"]
     }
 }
+
+
+class ActivityService:
+    def __init__(self, initial_data):
+        self.data = copy.deepcopy(initial_data)
+
+    def get_activities(self):
+        return self.data
+
+    def signup(self, activity_name, email):
+        if activity_name not in self.data:
+            raise HTTPException(status_code=404, detail="Activity not found")
+        
+        activity = self.data[activity_name]
+        if email in activity["participants"]:
+            raise HTTPException(status_code=400, detail="Student already signed up for this activity")
+        
+        if len(activity["participants"]) >= activity["max_participants"]:
+            raise HTTPException(status_code=400, detail="Activity is full")
+        
+        activity["participants"].append(email)
+        return {"message": f"Signed up {email} for {activity_name}"}
+
+    def unregister(self, activity_name, email):
+        if activity_name not in self.data:
+            raise HTTPException(status_code=404, detail="Activity not found")
+        
+        activity = self.data[activity_name]
+        if email not in activity["participants"]:
+            raise HTTPException(status_code=400, detail="Student not signed up for this activity")
+        
+        activity["participants"].remove(email)
+        return {"message": f"Removed {email} from {activity_name}"}
+
+
+# Global service instance
+activity_service = ActivityService(activities_initial)
 
 
 @app.get("/")
@@ -49,19 +123,16 @@ def root():
 
 @app.get("/activities")
 def get_activities():
-    return activities
+    return activity_service.get_activities()
 
 
 @app.post("/activities/{activity_name}/signup")
 def signup_for_activity(activity_name: str, email: str):
     """Sign up a student for an activity"""
-    # Validate activity exists
-    if activity_name not in activities:
-        raise HTTPException(status_code=404, detail="Activity not found")
+    return activity_service.signup(activity_name, email)
 
-    # Get the specific activity
-    activity = activities[activity_name]
 
-    # Add student
-    activity["participants"].append(email)
-    return {"message": f"Signed up {email} for {activity_name}"}
+@app.post("/activities/{activity_name}/unregister")
+def unregister_for_activity(activity_name: str, email: str):
+    """Unregister a student from an activity"""
+    return activity_service.unregister(activity_name, email)
